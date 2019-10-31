@@ -1,6 +1,6 @@
-(function(root,create){
+(function (root,create){
     root.charts = create(root);
-})("undefined"!==typeof window?window:this,function (root) {
+})("undefined" !==typeof window?window:this,function (root) {
     var final={};
     function createNode(name,options) {
       options=options?options:{};
@@ -14,7 +14,7 @@
 
     final.init = function(outDiv){
       var _this = this;
-      if(this.defaultOptions === undefined){
+      if(!this.hasOwnProperty("defaultOptions")){
         var svgWidth,svgHeight;
         var xTitleHeight = 30;
         var yTitleWidth = 30;
@@ -34,16 +34,17 @@
           pollingTime:1000,
           xTitle:"",
           yTitle:"",
-          xCalibration:[],          //x坐标集合
+          dataValue:[],
+          xCalibration:[],          //x坐标刻度集合
           xAxisLength:"auto",       //x轴长度
           svgWidth,
-          svgHeight:svgHeight-totalTitleWidth,
+          svgHeight:svgHeight-totalTitleWidth-xTitleHeight,
           xTitleHeight,
           startPointX:yTitleWidth,
           startPointY:svgHeight-xTitleHeight
         };
       }
-      if(this.dataSource === undefined){
+      if(!this.hasOwnProperty("dataSource")){
         var value;
         Object.defineProperty(this,"dataSource",{
           get(){
@@ -69,105 +70,140 @@
     };
 
     final.createPath = function(nodeParent,typeCharts){
-      function pushPoint(pathValue,valueY,preValueY){
-        var reg = new RegExp(/[, ] *(-?(?:\d+\.)?\d+)/);
-        var reg2 = new RegExp(/[LM] *\d+\.?\d+[, ] *-?(?:\d+\.)?\d+$/);
-        console.log(pathValue);
-        var preSvgValue = pathValue.match(reg2)[0];
-        var preSvgValueY = preSvgValue.match(reg)[1];
-        var preSvgValueX = preSvgValue.match(/[LM] *(-?\d+)/)[1];
-        pathValue += " L"+(preSvgValueX*1+1)+","+(preSvgValueY*1-(valueY-preValueY)).toFixed(0);
-        return [pathValue,valueY]
+      function shrink(max,min,totalMul,pathValue){
+        var multiple = (max -min)/options.svgHeight;
+        if(multiple.toFixed(2)>1) {
+          totalMul = totalMul * multiple;
+          max = max / multiple;
+          min = min / multiple;
+          var lIndex = pathValue.indexOf("l");
+          var mPath = pathValue.substring(0, lIndex);
+          var lPath = pathValue.substr(lIndex);
+          mPath = mPath.replace(regM, function (mul, svgHeight) {
+            return function (value) {
+              return "," + ((svgHeight * (mul - 1) + value.match(/-?(?:\d+\.)?\d+/)[0] * 1) / mul).toFixed(1);
+            }
+          }(multiple, options.startPointY));
+          lPath = lPath.replace(reg, function (mul) {
+            return function (value) {
+              return "," + (value.match(/-?(?:\d+\.)?\d+/)[0] / mul).toFixed(3) * 1;
+            }
+          }(multiple));//最终时测试此处闭包不会释放资源?(若不释放的话可否使用具名函数循环代替）
+          pathValue = mPath + lPath;
+        }
+        return [max,min,totalMul,pathValue];
       }
       if(typeCharts === "line"){
-        var min = 0,max = 0;
-        //对获取到的数据进行操作，数据在this.dataSource中
-        var data = this.dataSource.split("\n");
-        //获取x,ytitle
-        var title = data.shift().split(",");
-        if(isNaN(title[0]) || isNaN(title[1])){
-          this.defaultOptions.xTitle = title[0];
-          this.defaultOptions.yTitle = title[1];
-        }
-        //对除title外的剩余点进行path展示
-        var pathValue="",
+        var xCaState, //判断x轴长度是否指定
+            count = 0,    //判断有效点个数
+            nowData,
+            min = 0,
+            max = 0,
+            pathValue="",
             firstValue,
             valueY,       //当前值
             preValueY,    //上一个值
-            reg = new RegExp(/[, ] *-?\d+/g),
+            reg = new RegExp(/[, ] *-?(?:\d+\.)?\d+/g),
+            regM = new RegExp(/[, ] *-?(?:\d+\.)?\d+/),
             totalMul = 1, //总缩小倍数
-            svgMax,       //svg画布中的最大值
-            svgMin;       //svg画布中的最小值
-        var xCalibration = this.defaultOptions.xCalibration;
+            xCalibration = this.defaultOptions.xCalibration,
+            data = this.dataSource.split("\n"),
+            title = data.shift().split(","),
+            options = this.defaultOptions,
+            dataValue = options.dataValue;
+
+        //x坐标集合初始化
         xCalibration = Array.isArray(xCalibration) === "Array"?xCalibration:[];
-        var options = this.defaultOptions;
-        if(xCalibration.length>0){
-          for(var i=0;i<data.length;i++){
-            var nowData = data[i].split(",");
-            valueY = nowData.length>1?nowData[1]:nowData[0];
-            if(isNaN(valueY))continue;
-            //查看path属性，根据min和max设置M的起始值，后面值选用相对坐标
-            if(i===0)pathValue += "M";
-          }
-        }else{
-          var ii = 0;
-          for(var i=0;i<data.length;i++){
-            var nowData = data[i].split(",");
-            if(nowData.length<2)continue;
-            xCalibration.push(nowData[0]);
-            valueY = nowData[1];
-            if(isNaN(valueY))continue;
-            //查看path属性，根据min和max设置M的起始值，后面值选用相对坐标
-            //第一个点放在0点
-            if(i===0){
-              pathValue += "M"+options.startPointX+","+options.startPointY;
-              /*min = valueY;
-              max = valueY;*/
-              //获取第一个值
-              firstValue = valueY;
-              preValueY = valueY;
-              continue;
-            }
-            //将新的点放入path最后（后期要考虑长度，移动等情况）
-            [pathValue,preValueY] = pushPoint(pathValue,valueY,preValueY);
-            //如果出现新的最小值，则图像整体上移，获取新的最小值
-            if(ii>1020-30){
-              console.log(max,min);
-            }
-            ii++;
-            if(valueY-firstValue<min){
-              pathValue = pathValue.replace(reg,function(dec){return function(value){return ","+(Math.floor(value.match(/-?\d+/) - dec));}}(min-(valueY-firstValue)));
-              min = valueY-firstValue;
-              svgMin = min/totalMul;
-            }else {
-              //获取新的最大值
-              if (valueY - firstValue > max) {
-                max = valueY - firstValue;
-                svgMax = max / totalMul;
-              }
-            }
-            //如果图像超出画布，则等比缩小
-            if(svgMax - svgMin > options.svgHeight){
-              var multiple = Math.ceil((svgMax - svgMin)/options.svgHeight);
-              totalMul = totalMul * multiple;
-              svgMax = svgMax/multiple;
-              svgMin = svgMin/multiple;
-              pathValue = pathValue.replace(reg,function(mul){return function(value){
-                var result = ","+(value.match(/-?\d+/)/mul).toFixed(0);
-                return result;}}(multiple));//最终时测试此处闭包不会释放资源?(若不释放的话可否使用具名函数循环代替）
-            }
-          }
-          console.log(pathValue);
+        xCaState = xCalibration.length>0;
+        //x轴长度未定，建议定默认长度
+        var length = data.length;
+        var svgPathWidth = options.svgWidth-options.startPointX;
+        var xAxisLength = options.xAxisLength==="auto"?length:options.xAxisLength;
+        var xSpacing = Math.floor(svgPathWidth / xAxisLength * 100)/100;
+        var firstPointState = true;
+
+        //获取x,ytitle
+        if(isNaN(title[0]) || isNaN(title[1])){
+          options.xTitle = title[0];
+          options.yTitle = title[1];
         }
-        //...
-        var nodePath = createNode("path",{d:pathValue,style:"stroke:rgb(99,99,99);stroke-width:2"});
+
+        //对除title外的剩余点进行path展示
+        if((!Array.isArray(dataValue))||dataValue.length>0){
+          options.dataValue=[];
+          dataValue = options.dataValue;
+        }
+
+        for(var i=0;i<length;i++){
+          nowData = data[i].split(",");
+          if(nowData.length<2)continue;
+          if(!xCaState)xCalibration.push(nowData[0]);
+          valueY = nowData[1];
+
+          //无效点判断
+          if(isNaN(valueY)){
+            xAxisLength--;
+            xSpacing = Math.floor(svgPathWidth / xAxisLength * 100)/100;
+            pathValue = pathValue?pathValue.replace(/l *(?:\d+\.)?\d+/g,function(xSpacing){return function () {return "l"+xSpacing;}}(xSpacing)):"";
+            continue;
+          }
+
+          //查看path属性，根据min和max设置M的起始值，后面值选用相对坐标
+          //第一个点放在0点
+          if(firstPointState){
+            pathValue += "M"+options.startPointX+","+options.startPointY;
+            //获取第一个值
+            firstValue = valueY;
+            preValueY = valueY;
+            firstPointState = false;
+            continue;
+          }else {
+
+            //累计有效点
+            count++;
+            dataValue.push(valueY);//备份有效数据值
+
+            //将新的点放入path最后（后期要考虑长度，移动等情况）
+            pathValue += " l" + xSpacing + "," + (-((valueY - preValueY) / totalMul)).toFixed(3) * 1;
+            var chazhi = (valueY - firstValue) / totalMul;
+            if (chazhi > max) {
+              max = chazhi;
+            } else {
+              if (chazhi < min) min = chazhi;
+            }
+            preValueY = valueY;
+            //判断是否坐标超x轴限制，超限后左移
+            if(count>xAxisLength){
+              pathValue = pathValue.replace(/(M *(?:\d+\.)?\d+)[, ] *(-?(?:\d+\.)?\d+) *l *(?:\d+\.)?\d+[, ] *(-?(?:\d+\.)?\d+)/,function (total,mPointX,mPointY,lPointY) {
+                max += lPointY*1;
+                min += lPointY*1;
+                return mPointX+","+(mPointY*1+lPointY*1)
+              })
+            }
+          }
+
+          //如果图像超出画布，则等比缩小
+          if((max -min) > options.svgHeight){
+            [max,min,totalMul,pathValue] = shrink(max,min,totalMul,pathValue);
+          }
+          //如果出现新的最小值，则图像整体上移，获取新的最小值
+          var rising = pathValue.match(/\d+[, ] *(-?(?:\d+\.)?\d+)/)[1] *1 - min -options.startPointY;
+          if(rising > 0){
+            pathValue = pathValue.replace(regM,function(dec){return function(value){
+              return ","+(value.match(/-?(?:\d+\.)?\d+/)[0]*1 - dec).toFixed(1);}}(rising));
+          }
+
+        }
+
+        //转化成html节点
+        var nodePath = createNode("path",{d:pathValue,style:"stroke:rgb(48,143,180);stroke-width:2",fill:"none"});
         var nodeG = createNode("g",{class:"mainPath"});
         nodeG.appendChild(nodePath);
         nodeParent.appendChild(nodeG);
         return [min,max];
       }
     };
-    final.showChart = function(){
+    final.showChart = function(){//1.创建path，如果是live模式，则判断path是否存在；2使用pushPoint对path中增加点，并进行图像的调整；
       this.createPath(this.nodeSvg,this.defaultOptions.chartType);
       this.createYaxis(this.nodeSvg,this.defaultOptions.chartType);
     };
@@ -199,6 +235,8 @@
     };
 
     final.create = function (container,options) {
+      if(!container)throw "Error:Container is wrong!";
+      if(!options) throw "Error:options is wrong!";
 
       //获取html的container容器
       var Container = document.getElementById(container);
@@ -209,11 +247,8 @@
       //初始化
       this.init(Container);
 
-      if(!container)throw "Error:Container is wrong!";
-
-      if(!options) return 0;
       for(var item in options){
-        if (this.defaultOptions[item] !==undefined)this.defaultOptions[item]=options[item];
+        if (this.defaultOptions.hasOwnProperty(item))this.defaultOptions[item]=options[item];
       }
 
 
@@ -229,6 +264,7 @@
     //返回window.charts对象
     return final;
 });
+
 charts.create("container",{
   type:"live-data",
   src:"http://ranranbaobao.cn/profile/csv.php",
