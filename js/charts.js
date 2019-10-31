@@ -12,7 +12,7 @@
       return newNode;
     }
 
-    final.init = function(outDiv){
+    function init(outDiv){
       var _this = this;
       if(!this.hasOwnProperty("defaultOptions")){
         var svgWidth,svgHeight;
@@ -52,7 +52,7 @@
           },
           set(newValue){
             value = newValue;
-            _this.showChart();
+            showChart.call(this);
           },
           enumerable:false,
           configurable:false
@@ -60,16 +60,16 @@
       }
     };
 
-    final.createYaxis = function(nodeParent,typeCharts){
+    function createYaxis(nodeParent,typeCharts){
       if(typeCharts === "line"){
         var nodeG = createNode("g",{class:"y_axis"});
         var nodeLine = createNode("line",{x1:"0",y1:"290",x2:"800",y2:"290",style:"stroke:rgb(99,99,99);stroke-width:2"});
         nodeG.appendChild(nodeLine);
         nodeParent.appendChild(nodeG);
       }
-    };
+    }
 
-    final.createPath = function(nodeParent,typeCharts){
+    function createPath(nodeParent,typeCharts){
       function shrink(max,min,totalMul,pathValue){
         var multiple = (max -min)/options.svgHeight;
         if(multiple.toFixed(2)>1) {
@@ -202,13 +202,13 @@
         nodeParent.appendChild(nodeG);
         return [min,max];
       }
-    };
-    final.showChart = function(){//1.创建path，如果是live模式，则判断path是否存在；2使用pushPoint对path中增加点，并进行图像的调整；
-      this.createPath(this.nodeSvg,this.defaultOptions.chartType);
-      this.createYaxis(this.nodeSvg,this.defaultOptions.chartType);
-    };
+    }
+    function showChart(){//1.创建path，如果是live模式，则判断path是否存在；2使用pushPoint对path中增加点，并进行图像的调整；
+      createPath.call(this,this.nodeSvg,this.defaultOptions.chartType);
+      createYaxis(this.nodeSvg,this.defaultOptions.chartType);
+    }
 
-    final.getAjaxData = function(options){
+    function getAjaxData(options){
       var _this = this;
       var xhr = new XMLHttpRequest();
       //修复mozillar浏览器的部分bug
@@ -223,11 +223,10 @@
       };
       xhr.send(null);
     };
-    final.getData = function(options){
-      var _this = this;
+    function getData(options){
       switch (options.type){
         case "live-data":
-          _this.getAjaxData(options);
+          getAjaxData.call(this,options);
           break;
         default:return false;
       }
@@ -243,9 +242,8 @@
 
       //创建svg根节点并保存
       this.nodeSvg = createNode("svg",{id:"main_svg",width:"100%",height:"100%",xmlns:"http://www.w3.org/2000/svg"});
-
       //初始化
-      this.init(Container);
+      init.call(this,Container);
 
       for(var item in options){
         if (this.defaultOptions.hasOwnProperty(item))this.defaultOptions[item]=options[item];
@@ -253,7 +251,7 @@
 
 
       //获取数据
-      if(!this.getData(this.defaultOptions))return -1;
+      if(!getData.call(this,this.defaultOptions))return -1;
       //定义y轴线样式
       //this.createYaxis(nodeSvg,this.defaultOptions.type);
 
