@@ -1,6 +1,6 @@
 # WebCharts
 A small-size module that use remota data to draw web charts with SVG
-Use Example:
+\nUse Example:
 1.
   charts.create("container",{
     type:"live-data",
