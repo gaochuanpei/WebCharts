@@ -7,6 +7,10 @@
       var svgNS="http://www.w3.org/2000/svg";
       var newNode = document.createElementNS(svgNS, name);
       for(var item in options){
+        if(item == "innerHTML"){
+          newNode[item] = options[item];
+          continue;
+        }
         newNode.setAttribute(item,options[item]);
       }
       return newNode;
@@ -17,8 +21,8 @@
       if(!this.hasOwnProperty("defaultOptions")){
         var svgWidth,svgHeight;
         var xTitleHeight = 30;
-        var yTitleWidth = 30;
-        var totalTitleWidth = 50;
+        var yTitleWidth = 80;
+        var totalTitleWidth = 60;
         //获取svg标签高度
         var svgWidthString = _this.nodeSvg.width.animVal.valueAsString;
         var svgHeightString = _this.nodeSvg.height.animVal.valueAsString;
@@ -75,8 +79,8 @@
 
     function createYaxis(nodeParent,typeCharts){
       //获取最大值，最小值，设置默认变量style（包含颜色，宽度等），varState中的y轴已创建变量，间距及数量变量
-      function lineAttr(options,max,min) {
-        var result = [],
+      function lineAttr(options,max,min,firstValue) {
+        var result = [],yTitleArr=[],
             startX = options.startPointX,
             lineLength = options.svgWidth - startX,
             style = options.yAxisStyle,
@@ -87,31 +91,54 @@
         if(isNaN(count) || count<1)throw "yAxis count wrong";
         for(var i =0;i<=count;i++){
           var obj = {};
+          var yTitle ={};
           obj.x1 = "" + startX;
           obj.y1 = "" + (startY - svgNextHeight*i);
           obj.x2 = "" + lineLength;
           obj.y2 = obj.y1;
           obj.style = style;
           result.push(obj);
+          yTitle.x = ""+(startX/3).toFixed(0);
+          yTitle.y = "" + (startY - svgNextHeight*i+5);
+          yTitle.fill = "black";
+          yTitle.class = "yTitleList";
+          yTitle.id = "yTitle_"+i;
+          yTitle.innerHTML=""+(firstValue+min+((max-min)/count)*i).toFixed(0);
+          yTitleArr.push(yTitle);
         }
         //...根据max和min放刻度
-        return result;
+        return [result,yTitleArr];
       }
       if(typeCharts === "line"){
-        var varState = this.varState;
-        if(!varState.yAxis){
-          var options = this.defaultOptions,
+        var varState = this.varState,
+            options = this.defaultOptions,
+            count=options.yAxisCount,
             dataScope = this.dataScope,
-            max = dataScope.max,
-            min = dataScope.min;
-          var lineArr = lineAttr(options,max,min);
+            totalMul = dataScope.totalMul,
+            max = dataScope.max.value*totalMul,
+            min = dataScope.min.value*totalMul,
+            firstValue = dataScope.dataValue[0]*1;
+        if(!varState.yAxis){
+          var lineArr,yTitle;
+          [lineArr,yTitle] = lineAttr(options,max,min,firstValue);
           var nodeG = createNode("g",{class:"y_axis"});
-          for(var i=0;i<lineArr.length;i++) {
+          for(var i=0;i<=count;i++) {
             var nodeLine = createNode("line", lineArr[i]);
+            var text = createNode("text",yTitle[i]);
+            nodeG.appendChild(text);
             nodeG.appendChild(nodeLine);
           }
           nodeParent.appendChild(nodeG);
           varState.yAxis = true;
+        }else{
+          var yAxisNode = nodeParent.getElementsByClassName("y_axis")[0];
+          var yTitleList = yAxisNode.getElementsByClassName("yTitleList");
+          count = yTitleList.length-1;
+          for(var j=0;j<=count;j++){
+            var nowNode = yTitleList[j];
+            var index = nowNode.id.match(/\d+/)[0]*1;
+            nowNode.innerHTML=""+(firstValue+min+((max-min)/count)*index).toFixed(0)*1;
+          }
         }
       }
     }
